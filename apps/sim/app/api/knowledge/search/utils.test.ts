@@ -32,6 +32,7 @@ vi.stubGlobal(
 
 vi.mock('@/lib/env', () => ({
   env: {},
+  getEnv: (key: string) => process.env[key],
   isTruthy: (value: string | boolean | number | undefined) =>
     typeof value === 'string' ? value === 'true' || value === '1' : Boolean(value),
 }))
@@ -41,7 +42,7 @@ import {
   handleTagAndVectorSearch,
   handleTagOnlySearch,
   handleVectorOnlySearch,
-} from './utils'
+} from '@/app/api/knowledge/search/utils'
 
 describe('Knowledge Search Utils', () => {
   beforeEach(() => {

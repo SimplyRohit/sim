@@ -23,9 +23,9 @@ import {
 } from '@/lib/billing/validation/seat-management'
 import { sendEmail } from '@/lib/email/mailer'
 import { quickValidateEmail } from '@/lib/email/validation'
-import { env } from '@/lib/env'
 import { createLogger } from '@/lib/logs/console/logger'
 import { hasWorkspaceAdminAccess } from '@/lib/permissions/utils'
+import { getBaseUrl } from '@/lib/urls/utils'
 
 const logger = createLogger('OrganizationInvitations')
 
@@ -244,16 +244,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const emailsToInvite = newEmails.filter((email: string) => !pendingEmails.includes(email))
 
     if (emailsToInvite.length === 0) {
+      const isSingleEmail = processedEmails.length === 1
+      const existingMembersEmails = processedEmails.filter((email: string) =>
+        existingEmails.includes(email)
+      )
+      const pendingInvitationEmails = processedEmails.filter((email: string) =>
+        pendingEmails.includes(email)
+      )
+
+      if (isSingleEmail) {
+        if (existingMembersEmails.length > 0) {
+          return NextResponse.json(
+            {
+              error: 'Failed to send invitation. User is already a part of the organization.',
+            },
+            { status: 400 }
+          )
+        }
+        if (pendingInvitationEmails.length > 0) {
+          return NextResponse.json(
+            {
+              error:
+                'Failed to send invitation. A pending invitation already exists for this email.',
+            },
+            { status: 400 }
+          )
+        }
+      }
+
       return NextResponse.json(
         {
-          error: 'All emails are already members or have pending invitations',
+          error: 'All emails are already members or have pending invitations.',
           details: {
-            existingMembers: processedEmails.filter((email: string) =>
-              existingEmails.includes(email)
-            ),
-            pendingInvitations: processedEmails.filter((email: string) =>
-              pendingEmails.includes(email)
-            ),
+            existingMembers: existingMembersEmails,
+            pendingInvitations: pendingInvitationEmails,
           },
         },
         { status: 400 }
@@ -339,7 +363,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           organizationEntry[0]?.name || 'organization',
           role,
           workspaceInvitationsWithNames,
-          `${env.NEXT_PUBLIC_APP_URL}/invite/${orgInvitation.id}`
+          `${getBaseUrl()}/invite/${orgInvitation.id}`
         )
 
         emailResult = await sendEmail({
@@ -352,7 +376,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const emailHtml = await renderInvitationEmail(
           inviter[0]?.name || 'Someone',
           organizationEntry[0]?.name || 'organization',
-          `${env.NEXT_PUBLIC_APP_URL}/invite/${orgInvitation.id}`,
+          `${getBaseUrl()}/invite/${orgInvitation.id}`,
           email
         )
 

@@ -3,10 +3,9 @@ name: 'Auto-translate Documentation'
 on:
   push:
     branches: [ staging ]
-    paths: 
+    paths:
       - 'apps/docs/content/docs/en/**'
       - 'apps/docs/i18n.json'
-  workflow_dispatch: # Allow manual triggers
 
 permissions:
   contents: write
@@ -28,6 +27,17 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.22
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            **/node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Run Lingo.dev translations
         env:
@@ -118,10 +128,21 @@ jobs:
         with:
           bun-version: 1.2.22
 
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            **/node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         run: |
           cd apps/docs
-          bun install
+          bun install --frozen-lockfile
 
       - name: Build documentation to verify translations
         run: |

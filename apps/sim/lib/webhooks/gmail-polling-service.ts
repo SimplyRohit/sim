@@ -1,22 +1,28 @@
 import { db } from '@sim/db'
 import { account, webhook } from '@sim/db/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { pollingIdempotency } from '@/lib/idempotency/service'
 import { createLogger } from '@/lib/logs/console/logger'
 import { getBaseUrl } from '@/lib/urls/utils'
 import { getOAuthToken, refreshAccessTokenIfNeeded } from '@/app/api/auth/oauth/utils'
+import type { GmailAttachment } from '@/tools/gmail/types'
+import { downloadAttachments, extractAttachmentInfo } from '@/tools/gmail/utils'
 
 const logger = createLogger('GmailPollingService')
+
+const MAX_CONSECUTIVE_FAILURES = 10
 
 interface GmailWebhookConfig {
   labelIds: string[]
   labelFilterBehavior: 'INCLUDE' | 'EXCLUDE'
   markAsRead: boolean
+  searchQuery?: string
   maxEmailsPerPoll?: number
   lastCheckedTimestamp?: string
   historyId?: string
   pollingInterval?: number
+  includeAttachments?: boolean
   includeRawEmail?: boolean
 }
 
@@ -42,13 +48,60 @@ export interface SimplifiedEmail {
   bodyHtml: string
   labels: string[]
   hasAttachments: boolean
-  attachments: Array<{ filename: string; mimeType: string; size: number }>
+  attachments: GmailAttachment[]
 }
 
 export interface GmailWebhookPayload {
   email: SimplifiedEmail
   timestamp: string
   rawEmail?: GmailEmail // Only included when includeRawEmail is true
+}
+
+async function markWebhookFailed(webhookId: string) {
+  try {
+    const result = await db
+      .update(webhook)
+      .set({
+        failedCount: sql`COALESCE(${webhook.failedCount}, 0) + 1`,
+        lastFailedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(webhook.id, webhookId))
+      .returning({ failedCount: webhook.failedCount })
+
+    const newFailedCount = result[0]?.failedCount || 0
+    const shouldDisable = newFailedCount >= MAX_CONSECUTIVE_FAILURES
+
+    if (shouldDisable) {
+      await db
+        .update(webhook)
+        .set({
+          isActive: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(webhook.id, webhookId))
+
+      logger.warn(
+        `Webhook ${webhookId} auto-disabled after ${MAX_CONSECUTIVE_FAILURES} consecutive failures`
+      )
+    }
+  } catch (err) {
+    logger.error(`Failed to mark webhook ${webhookId} as failed:`, err)
+  }
+}
+
+async function markWebhookSuccess(webhookId: string) {
+  try {
+    await db
+      .update(webhook)
+      .set({
+        failedCount: 0, // Reset on success
+        updatedAt: new Date(),
+      })
+      .where(eq(webhook.id, webhookId))
+  } catch (err) {
+    logger.error(`Failed to mark webhook ${webhookId} as successful:`, err)
+  }
 }
 
 export async function pollGmailWebhooks() {
@@ -72,8 +125,9 @@ export async function pollGmailWebhooks() {
     // exhausting Postgres or Gmail API connections when many users exist.
     const CONCURRENCY = 10
 
-    const running: Promise<any>[] = []
-    const settledResults: PromiseSettledResult<any>[] = []
+    const running: Promise<void>[] = []
+    let successCount = 0
+    let failureCount = 0
 
     const enqueue = async (webhookData: (typeof activeWebhooks)[number]) => {
       const webhookId = webhookData.id
@@ -87,7 +141,9 @@ export async function pollGmailWebhooks() {
 
         if (!credentialId && !userId) {
           logger.error(`[${requestId}] Missing credentialId and userId for webhook ${webhookId}`)
-          return { success: false, webhookId, error: 'Missing credentialId and userId' }
+          await markWebhookFailed(webhookId)
+          failureCount++
+          return
         }
 
         // Resolve owner and token
@@ -98,7 +154,9 @@ export async function pollGmailWebhooks() {
             logger.error(
               `[${requestId}] Credential ${credentialId} not found for webhook ${webhookId}`
             )
-            return { success: false, webhookId, error: 'Credential not found' }
+            await markWebhookFailed(webhookId)
+            failureCount++
+            return
           }
           const ownerUserId = rows[0].userId
           accessToken = await refreshAccessTokenIfNeeded(credentialId, ownerUserId, requestId)
@@ -111,7 +169,9 @@ export async function pollGmailWebhooks() {
           logger.error(
             `[${requestId}] Failed to get Gmail access token for webhook ${webhookId} (cred or fallback)`
           )
-          return { success: false, webhookId, error: 'No access token' }
+          await markWebhookFailed(webhookId)
+          failureCount++
+          return
         }
 
         // Get webhook configuration
@@ -131,8 +191,10 @@ export async function pollGmailWebhooks() {
             now.toISOString(),
             latestHistoryId || config.historyId
           )
+          await markWebhookSuccess(webhookId)
           logger.info(`[${requestId}] No new emails found for webhook ${webhookId}`)
-          return { success: true, webhookId, status: 'no_emails' }
+          successCount++
+          return
         }
 
         logger.info(`[${requestId}] Found ${emails.length} new emails for webhook ${webhookId}`)
@@ -153,47 +215,46 @@ export async function pollGmailWebhooks() {
 
         // Update webhook with latest history ID and timestamp
         await updateWebhookData(webhookId, now.toISOString(), latestHistoryId || config.historyId)
+        await markWebhookSuccess(webhookId)
+        successCount++
 
-        return {
-          success: true,
-          webhookId,
-          emailsFound: emails.length,
-          emailsProcessed: processed,
-        }
+        logger.info(
+          `[${requestId}] Successfully processed ${processed} emails for webhook ${webhookId}`
+        )
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         logger.error(`[${requestId}] Error processing Gmail webhook ${webhookId}:`, error)
-        return { success: false, webhookId, error: errorMessage }
+        await markWebhookFailed(webhookId)
+        failureCount++
       }
     }
 
     for (const webhookData of activeWebhooks) {
-      running.push(enqueue(webhookData))
+      const promise = enqueue(webhookData)
+        .then(() => {
+          // Result processed, memory released
+        })
+        .catch((err) => {
+          logger.error('Unexpected error in webhook processing:', err)
+          failureCount++
+        })
+
+      running.push(promise)
 
       if (running.length >= CONCURRENCY) {
-        const result = await Promise.race(running)
-        running.splice(running.indexOf(result), 1)
-        settledResults.push(result)
+        const completedIdx = await Promise.race(running.map((p, i) => p.then(() => i)))
+        running.splice(completedIdx, 1)
       }
     }
 
-    while (running.length) {
-      const result = await Promise.race(running)
-      running.splice(running.indexOf(result), 1)
-      settledResults.push(result)
-    }
-
-    const results = settledResults
+    // Wait for remaining webhooks to complete
+    await Promise.allSettled(running)
 
     const summary = {
-      total: results.length,
-      successful: results.filter((r) => r.status === 'fulfilled' && r.value.success).length,
-      failed: results.filter(
-        (r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)
-      ).length,
-      details: results.map((r) =>
-        r.status === 'fulfilled' ? r.value : { success: false, error: r.reason }
-      ),
+      total: activeWebhooks.length,
+      successful: successCount,
+      failed: failureCount,
+      details: [], // Don't store details to save memory
     }
 
     logger.info('Gmail polling completed', {
@@ -305,13 +366,53 @@ async function fetchNewEmails(accessToken: string, config: GmailWebhookConfig, r
   }
 }
 
+/**
+ * Builds a Gmail search query from label and search configuration
+ */
+function buildGmailSearchQuery(config: {
+  labelIds?: string[]
+  labelFilterBehavior?: 'INCLUDE' | 'EXCLUDE'
+  searchQuery?: string
+}): string {
+  let labelQuery = ''
+  if (config.labelIds && config.labelIds.length > 0) {
+    const labelParts = config.labelIds.map((label) => `label:${label}`).join(' OR ')
+    labelQuery =
+      config.labelFilterBehavior === 'INCLUDE'
+        ? config.labelIds.length > 1
+          ? `(${labelParts})`
+          : labelParts
+        : config.labelIds.length > 1
+          ? `-(${labelParts})`
+          : `-${labelParts}`
+  }
+
+  let searchQueryPart = ''
+  if (config.searchQuery?.trim()) {
+    searchQueryPart = config.searchQuery.trim()
+    if (searchQueryPart.includes(' OR ') || searchQueryPart.includes(' AND ')) {
+      searchQueryPart = `(${searchQueryPart})`
+    }
+  }
+
+  let baseQuery = ''
+  if (labelQuery && searchQueryPart) {
+    baseQuery = `${labelQuery} ${searchQueryPart}`
+  } else if (searchQueryPart) {
+    baseQuery = searchQueryPart
+  } else if (labelQuery) {
+    baseQuery = labelQuery
+  } else {
+    baseQuery = 'in:inbox'
+  }
+
+  return baseQuery
+}
+
 async function searchEmails(accessToken: string, config: GmailWebhookConfig, requestId: string) {
   try {
-    // Build query parameters for label filtering
-    const labelQuery =
-      config.labelIds && config.labelIds.length > 0
-        ? config.labelIds.map((label) => `label:${label}`).join(' ')
-        : 'in:inbox'
+    const baseQuery = buildGmailSearchQuery(config)
+    logger.debug(`[${requestId}] Gmail search query: ${baseQuery}`)
 
     // Improved time-based filtering with dynamic buffer
     let timeConstraint = ''
@@ -360,11 +461,8 @@ async function searchEmails(accessToken: string, config: GmailWebhookConfig, req
       logger.debug(`[${requestId}] No last check time, using default: newer_than:1d`)
     }
 
-    // Combine label and time constraints
-    const query =
-      config.labelFilterBehavior === 'INCLUDE'
-        ? `${labelQuery}${timeConstraint}`
-        : `-${labelQuery}${timeConstraint}`
+    // Combine base query and time constraints
+    const query = `${baseQuery}${timeConstraint}`
 
     logger.info(`[${requestId}] Searching for emails with query: ${query}`)
 
@@ -530,30 +628,23 @@ async function processEmails(
             date = new Date(Number.parseInt(email.internalDate)).toISOString()
           }
 
-          // Extract attachment information if present
-          const attachments: Array<{ filename: string; mimeType: string; size: number }> = []
+          // Download attachments if requested (raw Buffers - will be uploaded during execution)
+          let attachments: GmailAttachment[] = []
+          const hasAttachments = email.payload
+            ? extractAttachmentInfo(email.payload).length > 0
+            : false
 
-          const findAttachments = (part: any) => {
-            if (!part) return
-
-            if (part.filename && part.filename.length > 0) {
-              attachments.push({
-                filename: part.filename,
-                mimeType: part.mimeType || 'application/octet-stream',
-                size: part.body?.size || 0,
-              })
+          if (config.includeAttachments && hasAttachments && email.payload) {
+            try {
+              const attachmentInfo = extractAttachmentInfo(email.payload)
+              attachments = await downloadAttachments(email.id, attachmentInfo, accessToken)
+            } catch (error) {
+              logger.error(
+                `[${requestId}] Error downloading attachments for email ${email.id}:`,
+                error
+              )
+              // Continue without attachments rather than failing the entire request
             }
-
-            // Look for attachments in nested parts
-            if (part.parts && Array.isArray(part.parts)) {
-              for (const subPart of part.parts) {
-                findAttachments(subPart)
-              }
-            }
-          }
-
-          if (email.payload) {
-            findAttachments(email.payload)
           }
 
           // Create simplified email object
@@ -568,8 +659,8 @@ async function processEmails(
             bodyText: textContent,
             bodyHtml: htmlContent,
             labels: email.labelIds || [],
-            hasAttachments: attachments.length > 0,
-            attachments: attachments,
+            hasAttachments,
+            attachments,
           }
 
           // Prepare webhook payload with simplified email and optionally raw email
@@ -660,8 +751,8 @@ async function markEmailAsRead(accessToken: string, messageId: string) {
 }
 
 async function updateWebhookLastChecked(webhookId: string, timestamp: string, historyId?: string) {
-  const existingConfig =
-    (await db.select().from(webhook).where(eq(webhook.id, webhookId)))[0]?.providerConfig || {}
+  const result = await db.select().from(webhook).where(eq(webhook.id, webhookId))
+  const existingConfig = (result[0]?.providerConfig as Record<string, any>) || {}
   await db
     .update(webhook)
     .set({
@@ -669,15 +760,15 @@ async function updateWebhookLastChecked(webhookId: string, timestamp: string, hi
         ...existingConfig,
         lastCheckedTimestamp: timestamp,
         ...(historyId ? { historyId } : {}),
-      },
+      } as any,
       updatedAt: new Date(),
     })
     .where(eq(webhook.id, webhookId))
 }
 
 async function updateWebhookData(webhookId: string, timestamp: string, historyId?: string) {
-  const existingConfig =
-    (await db.select().from(webhook).where(eq(webhook.id, webhookId)))[0]?.providerConfig || {}
+  const result = await db.select().from(webhook).where(eq(webhook.id, webhookId))
+  const existingConfig = (result[0]?.providerConfig as Record<string, any>) || {}
 
   await db
     .update(webhook)
@@ -686,7 +777,7 @@ async function updateWebhookData(webhookId: string, timestamp: string, historyId
         ...existingConfig,
         lastCheckedTimestamp: timestamp,
         ...(historyId ? { historyId } : {}),
-      },
+      } as any,
       updatedAt: new Date(),
     })
     .where(eq(webhook.id, webhookId))
