@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { client } from '@/lib/auth-client'
+import { client } from '@/lib/auth/auth-client'
 import { createLogger } from '@/lib/logs/console/logger'
 
 const logger = createLogger('OrganizationQueries')
@@ -257,7 +257,7 @@ export function useUpdateOrganizationUsageLimit() {
  */
 interface InviteMemberParams {
   email: string
-  workspaceInvitations?: Array<{ id: string; name: string }>
+  workspaceInvitations?: Array<{ workspaceId: string; permission: 'admin' | 'write' | 'read' }>
   orgId: string
 }
 

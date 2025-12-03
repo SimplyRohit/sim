@@ -3,10 +3,11 @@ import { useParams } from 'next/navigation'
 import { Handle, type NodeProps, Position, useUpdateNodeInternals } from 'reactflow'
 import { Badge } from '@/components/emcn/components/badge/badge'
 import { Tooltip } from '@/components/emcn/components/tooltip/tooltip'
-import { getEnv, isTruthy } from '@/lib/env'
+import { getEnv, isTruthy } from '@/lib/core/config/env'
+import { cn } from '@/lib/core/utils/cn'
 import { createLogger } from '@/lib/logs/console/logger'
 import { createMcpToolId } from '@/lib/mcp/utils'
-import { cn } from '@/lib/utils'
+import { getProviderIdFromServiceId } from '@/lib/oauth'
 import { useUserPermissionsContext } from '@/app/workspace/[workspaceId]/providers/workspace-permissions-provider'
 import {
   ActionBar,
@@ -272,9 +273,12 @@ const SubBlockRow = ({
 
   const credentialSourceId =
     subBlock?.type === 'oauth-input' && typeof rawValue === 'string' ? rawValue : undefined
+  const credentialProviderId = subBlock?.serviceId
+    ? getProviderIdFromServiceId(subBlock.serviceId)
+    : undefined
   const { displayName: credentialName } = useCredentialName(
     credentialSourceId,
-    subBlock?.provider,
+    credentialProviderId,
     workflowId
   )
 
@@ -844,7 +848,7 @@ export const WorkflowBlock = memo(function WorkflowBlock({
             <div
               className='flex h-[24px] w-[24px] flex-shrink-0 items-center justify-center rounded-[6px]'
               style={{
-                backgroundColor: isEnabled ? config.bgColor : 'gray',
+                background: isEnabled ? config.bgColor : 'gray',
               }}
             >
               <config.icon className='h-[16px] w-[16px] text-white' />

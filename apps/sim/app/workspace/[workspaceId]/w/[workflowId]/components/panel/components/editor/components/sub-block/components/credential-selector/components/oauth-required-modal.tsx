@@ -10,7 +10,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/components/emcn'
-import { client } from '@/lib/auth-client'
+import { client } from '@/lib/auth/auth-client'
 import { createLogger } from '@/lib/logs/console/logger'
 import {
   getProviderIdFromServiceId,
@@ -231,6 +231,7 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   'projects:full': 'Full access to manage your Pipedrive projects',
   'webhooks:read': 'Read your Pipedrive webhooks',
   'webhooks:full': 'Full access to manage your Pipedrive webhooks',
+  w_member_social: 'Access your LinkedIn profile',
 }
 
 function getScopeDescription(scope: string): string {

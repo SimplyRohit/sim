@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui'
 import { TagInput } from '@/components/ui/tag-input'
-import { useSession } from '@/lib/auth-client'
+import { useSession } from '@/lib/auth/auth-client'
 import { createLogger } from '@/lib/logs/console/logger'
 import { WorkflowPreview } from '@/app/workspace/[workspaceId]/w/components/workflow-preview/workflow-preview'
 import {
@@ -87,7 +87,7 @@ export function TemplateDeploy({ workflowId, onDeploymentComplete }: TemplateDep
 
     setLoadingCreators(true)
     try {
-      const response = await fetch('/api/creator-profiles')
+      const response = await fetch('/api/creators')
       if (response.ok) {
         const data = await response.json()
         const profiles = (data.profiles || []).map((profile: any) => ({

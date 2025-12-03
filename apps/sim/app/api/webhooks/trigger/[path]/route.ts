@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import { generateRequestId } from '@/lib/core/utils/request'
 import { createLogger } from '@/lib/logs/console/logger'
-import { generateRequestId } from '@/lib/utils'
 import {
   checkWebhookPreprocessing,
   findWebhookAndWorkflow,
@@ -9,7 +9,7 @@ import {
   queueWebhookExecution,
   verifyProviderAuth,
 } from '@/lib/webhooks/processor'
-import { blockExistsInDeployment } from '@/lib/workflows/db-helpers'
+import { blockExistsInDeployment } from '@/lib/workflows/persistence/utils'
 
 const logger = createLogger('WebhookTriggerAPI')
 
@@ -125,12 +125,7 @@ export async function POST(
 
   let preprocessError: NextResponse | null = null
   try {
-    preprocessError = await checkWebhookPreprocessing(
-      foundWorkflow,
-      foundWebhook,
-      requestId,
-      false // testMode
-    )
+    preprocessError = await checkWebhookPreprocessing(foundWorkflow, foundWebhook, requestId)
     if (preprocessError) {
       return preprocessError
     }

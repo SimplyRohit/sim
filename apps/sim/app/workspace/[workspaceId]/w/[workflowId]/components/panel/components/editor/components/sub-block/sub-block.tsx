@@ -2,7 +2,7 @@ import { type JSX, type MouseEvent, memo, useRef, useState } from 'react'
 import { AlertTriangle, Wand2 } from 'lucide-react'
 import { Label, Tooltip } from '@/components/emcn/components'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/core/utils/cn'
 import type { FieldDiffStatus } from '@/lib/workflows/diff/types'
 import {
   ChannelSelectorInput,
@@ -346,10 +346,11 @@ function SubBlockComponent({
     | undefined
 
   // Use dependsOn gating to compute final disabled state
+  // Only pass previewContextValues when in preview mode to avoid format mismatches
   const { finalDisabled: gatedDisabled } = useDependsOnGate(blockId, config, {
     disabled,
     isPreview,
-    previewContextValues: subBlockValues,
+    previewContextValues: isPreview ? subBlockValues : undefined,
   })
 
   const isDisabled = gatedDisabled
@@ -611,7 +612,7 @@ function SubBlockComponent({
             disabled={isDisabled}
             isPreview={isPreview}
             previewValue={previewValue}
-            previewContextValues={subBlockValues}
+            previewContextValues={isPreview ? subBlockValues : undefined}
           />
         )
 

@@ -3,7 +3,7 @@ import { tasks } from '@trigger.dev/sdk'
 import { and, eq } from 'drizzle-orm'
 import { type NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
-import { env, isTruthy } from '@/lib/env'
+import { env, isTruthy } from '@/lib/core/config/env'
 import { preprocessExecution } from '@/lib/execution/preprocessing'
 import { createLogger } from '@/lib/logs/console/logger'
 import { convertSquareBracketsToTwiML } from '@/lib/webhooks/utils'
@@ -498,8 +498,7 @@ export async function verifyProviderAuth(
 export async function checkWebhookPreprocessing(
   foundWorkflow: any,
   foundWebhook: any,
-  requestId: string,
-  testMode: boolean
+  requestId: string
 ): Promise<NextResponse | null> {
   try {
     const executionId = uuidv4()
@@ -512,7 +511,6 @@ export async function checkWebhookPreprocessing(
       requestId,
       checkRateLimit: true, // Webhooks need rate limiting
       checkDeployment: true, // Webhooks require deployed workflows
-      skipUsageLimits: testMode, // Skip usage limits for test webhooks
       workspaceId: foundWorkflow.workspaceId,
     })
 

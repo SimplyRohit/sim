@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Skeleton } from '@/components/ui'
-import { useSession } from '@/lib/auth-client'
+import { useSession } from '@/lib/auth/auth-client'
 import { DEFAULT_TEAM_TIER_COST_LIMIT } from '@/lib/billing/constants'
 import { checkEnterprisePlan } from '@/lib/billing/subscriptions/utils'
-import { env } from '@/lib/env'
+import { env } from '@/lib/core/config/env'
 import { createLogger } from '@/lib/logs/console/logger'
-import { generateSlug, getUsedSeats, getUserRole, isAdminOrOwner } from '@/lib/organization'
+import {
+  generateSlug,
+  getUsedSeats,
+  getUserRole,
+  isAdminOrOwner,
+} from '@/lib/workspaces/organization'
 import {
   MemberInvitationCard,
   NoOrganizationView,
@@ -123,8 +128,8 @@ export function TeamManagement() {
       const workspaceInvitations =
         selectedWorkspaces.length > 0
           ? selectedWorkspaces.map((w) => ({
-              id: w.workspaceId,
-              name: adminWorkspaces.find((uw) => uw.id === w.workspaceId)?.name || '',
+              workspaceId: w.workspaceId,
+              permission: w.permission as 'admin' | 'write' | 'read',
             }))
           : undefined
 
@@ -145,14 +150,7 @@ export function TeamManagement() {
     } catch (error) {
       logger.error('Failed to invite member', error)
     }
-  }, [
-    session?.user?.id,
-    activeOrganization?.id,
-    inviteEmail,
-    selectedWorkspaces,
-    adminWorkspaces,
-    inviteMutation,
-  ])
+  }, [session?.user?.id, activeOrganization?.id, inviteEmail, selectedWorkspaces, inviteMutation])
 
   const handleWorkspaceToggle = useCallback((workspaceId: string, permission: string) => {
     setSelectedWorkspaces((prev) => {

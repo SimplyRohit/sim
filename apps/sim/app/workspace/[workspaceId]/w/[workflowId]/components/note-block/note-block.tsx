@@ -2,7 +2,7 @@ import { memo, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { NodeProps } from 'reactflow'
 import remarkGfm from 'remark-gfm'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/core/utils/cn'
 import { useUserPermissionsContext } from '@/app/workspace/[workspaceId]/providers/workspace-permissions-provider'
 import { useBlockCore } from '@/app/workspace/[workspaceId]/w/[workflowId]/hooks'
 import {
@@ -196,7 +196,7 @@ export const NoteBlock = memo(function NoteBlock({ id, data }: NodeProps<NoteBlo
           <div className='flex min-w-0 flex-1 items-center gap-[10px]'>
             <div
               className='flex h-[24px] w-[24px] flex-shrink-0 items-center justify-center rounded-[6px]'
-              style={{ backgroundColor: isEnabled ? config.bgColor : 'gray' }}
+              style={{ background: isEnabled ? config.bgColor : 'gray' }}
             >
               <config.icon className='h-[16px] w-[16px] text-white' />
             </div>

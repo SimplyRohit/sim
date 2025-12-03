@@ -4,6 +4,7 @@ import {
   airtableListRecordsTool,
   airtableUpdateRecordTool,
 } from '@/tools/airtable'
+import { apifyRunActorAsyncTool, apifyRunActorSyncTool } from '@/tools/apify'
 import {
   apolloAccountBulkCreateTool,
   apolloAccountBulkUpdateTool,
@@ -107,6 +108,14 @@ import {
   discordUpdateMemberTool,
   discordUpdateRoleTool,
 } from '@/tools/discord'
+import {
+  deleteTool as dynamodbDeleteTool,
+  getTool as dynamodbGetTool,
+  putTool as dynamodbPutTool,
+  queryTool as dynamodbQueryTool,
+  scanTool as dynamodbScanTool,
+  updateTool as dynamodbUpdateTool,
+} from '@/tools/dynamodb'
 import { elevenLabsTtsTool } from '@/tools/elevenlabs'
 import {
   exaAnswerTool,
@@ -116,7 +125,13 @@ import {
   exaSearchTool,
 } from '@/tools/exa'
 import { fileParseTool } from '@/tools/file'
-import { crawlTool, extractTool, mapTool, scrapeTool, searchTool } from '@/tools/firecrawl'
+import {
+  crawlTool,
+  extractTool,
+  searchTool as firecrawlSearchTool,
+  mapTool,
+  scrapeTool,
+} from '@/tools/firecrawl'
 import { functionExecuteTool } from '@/tools/function'
 import {
   githubAddAssigneesTool,
@@ -419,6 +434,7 @@ import {
   linearUpdateProjectTool,
   linearUpdateWorkflowStateTool,
 } from '@/tools/linear'
+import { linkedInGetProfileTool, linkedInSharePostTool } from '@/tools/linkedin'
 import { linkupSearchTool } from '@/tools/linkup'
 import {
   mailchimpAddMemberTagsTool,
@@ -495,6 +511,16 @@ import {
   mailchimpUpdateSegmentTool,
   mailchimpUpdateTemplateTool,
 } from '@/tools/mailchimp'
+import {
+  mailgunAddListMemberTool,
+  mailgunCreateMailingListTool,
+  mailgunGetDomainTool,
+  mailgunGetMailingListTool,
+  mailgunGetMessageTool,
+  mailgunListDomainsTool,
+  mailgunListMessagesTool,
+  mailgunSendMessageTool,
+} from '@/tools/mailgun'
 import { mem0AddMemoriesTool, mem0GetMemoriesTool, mem0SearchMemoriesTool } from '@/tools/mem0'
 import { memoryAddTool, memoryDeleteTool, memoryGetAllTool, memoryGetTool } from '@/tools/memory'
 import {
@@ -708,6 +734,13 @@ import {
 } from '@/tools/pylon'
 import { qdrantFetchTool, qdrantSearchTool, qdrantUpsertTool } from '@/tools/qdrant'
 import {
+  deleteTool as rdsDeleteTool,
+  executeTool as rdsExecuteTool,
+  insertTool as rdsInsertTool,
+  queryTool as rdsQueryTool,
+  updateTool as rdsUpdateTool,
+} from '@/tools/rds'
+import {
   redditDeleteTool,
   redditEditTool,
   redditGetCommentsTool,
@@ -756,6 +789,25 @@ import {
   salesforceUpdateOpportunityTool,
   salesforceUpdateTaskTool,
 } from '@/tools/salesforce'
+import { searchTool } from '@/tools/search'
+import {
+  sendGridAddContactsToListTool,
+  sendGridAddContactTool,
+  sendGridCreateListTool,
+  sendGridCreateTemplateTool,
+  sendGridCreateTemplateVersionTool,
+  sendGridDeleteContactsTool,
+  sendGridDeleteListTool,
+  sendGridDeleteTemplateTool,
+  sendGridGetContactTool,
+  sendGridGetListTool,
+  sendGridGetTemplateTool,
+  sendGridListAllListsTool,
+  sendGridListTemplatesTool,
+  sendGridRemoveContactsFromListTool,
+  sendGridSearchContactsTool,
+  sendGridSendMailTool,
+} from '@/tools/sendgrid'
 import {
   createDeployTool,
   createProjectTool,
@@ -791,6 +843,7 @@ import {
   slackUpdateMessageTool,
 } from '@/tools/slack'
 import { smsSendTool } from '@/tools/sms'
+import { smtpSendMailTool } from '@/tools/smtp'
 import { stagehandAgentTool, stagehandExtractTool } from '@/tools/stagehand'
 import {
   stripeCancelPaymentIntentTool,
@@ -1016,7 +1069,7 @@ export const tools: Record<string, ToolConfig> = {
   vision_tool: visionTool,
   file_parser: fileParseTool,
   firecrawl_scrape: scrapeTool,
-  firecrawl_search: searchTool,
+  firecrawl_search: firecrawlSearchTool,
   firecrawl_crawl: crawlTool,
   firecrawl_map: mapTool,
   firecrawl_extract: extractTool,
@@ -1025,7 +1078,34 @@ export const tools: Record<string, ToolConfig> = {
   jina_read_url: readUrlTool,
   jina_search: jinaSearchTool,
   linkup_search: linkupSearchTool,
+  linkedin_share_post: linkedInSharePostTool,
+  linkedin_get_profile: linkedInGetProfileTool,
   resend_send: mailSendTool,
+  sendgrid_send_mail: sendGridSendMailTool,
+  sendgrid_add_contact: sendGridAddContactTool,
+  sendgrid_get_contact: sendGridGetContactTool,
+  sendgrid_search_contacts: sendGridSearchContactsTool,
+  sendgrid_delete_contacts: sendGridDeleteContactsTool,
+  sendgrid_create_list: sendGridCreateListTool,
+  sendgrid_get_list: sendGridGetListTool,
+  sendgrid_list_all_lists: sendGridListAllListsTool,
+  sendgrid_delete_list: sendGridDeleteListTool,
+  sendgrid_add_contacts_to_list: sendGridAddContactsToListTool,
+  sendgrid_remove_contacts_from_list: sendGridRemoveContactsFromListTool,
+  sendgrid_create_template: sendGridCreateTemplateTool,
+  sendgrid_get_template: sendGridGetTemplateTool,
+  sendgrid_list_templates: sendGridListTemplatesTool,
+  sendgrid_delete_template: sendGridDeleteTemplateTool,
+  sendgrid_create_template_version: sendGridCreateTemplateVersionTool,
+  smtp_send_mail: smtpSendMailTool,
+  mailgun_send_message: mailgunSendMessageTool,
+  mailgun_get_message: mailgunGetMessageTool,
+  mailgun_list_messages: mailgunListMessagesTool,
+  mailgun_create_mailing_list: mailgunCreateMailingListTool,
+  mailgun_get_mailing_list: mailgunGetMailingListTool,
+  mailgun_add_list_member: mailgunAddListMemberTool,
+  mailgun_list_domains: mailgunListDomainsTool,
+  mailgun_get_domain: mailgunGetDomainTool,
   sms_send: smsSendTool,
   jira_retrieve: jiraRetrieveTool,
   jira_update: jiraUpdateTool,
@@ -1162,6 +1242,17 @@ export const tools: Record<string, ToolConfig> = {
   postgresql_update: postgresUpdateTool,
   postgresql_delete: postgresDeleteTool,
   postgresql_execute: postgresExecuteTool,
+  rds_query: rdsQueryTool,
+  rds_insert: rdsInsertTool,
+  rds_update: rdsUpdateTool,
+  rds_delete: rdsDeleteTool,
+  rds_execute: rdsExecuteTool,
+  dynamodb_get: dynamodbGetTool,
+  dynamodb_put: dynamodbPutTool,
+  dynamodb_query: dynamodbQueryTool,
+  dynamodb_scan: dynamodbScanTool,
+  dynamodb_update: dynamodbUpdateTool,
+  dynamodb_delete: dynamodbDeleteTool,
   mongodb_query: mongodbQueryTool,
   mongodb_insert: mongodbInsertTool,
   mongodb_update: mongodbUpdateTool,
@@ -1347,6 +1438,8 @@ export const tools: Record<string, ToolConfig> = {
   airtable_get_record: airtableGetRecordTool,
   airtable_list_records: airtableListRecordsTool,
   airtable_update_record: airtableUpdateRecordTool,
+  apify_run_actor_sync: apifyRunActorSyncTool,
+  apify_run_actor_async: apifyRunActorAsyncTool,
   apollo_people_search: apolloPeopleSearchTool,
   apollo_people_enrich: apolloPeopleEnrichTool,
   apollo_people_bulk_enrich: apolloPeopleBulkEnrichTool,
@@ -1395,6 +1488,7 @@ export const tools: Record<string, ToolConfig> = {
   knowledge_search: knowledgeSearchTool,
   knowledge_upload_chunk: knowledgeUploadChunkTool,
   knowledge_create_document: knowledgeCreateDocumentTool,
+  search_tool: searchTool,
   elevenlabs_tts: elevenLabsTtsTool,
   stt_whisper: whisperSttTool,
   stt_deepgram: deepgramSttTool,
